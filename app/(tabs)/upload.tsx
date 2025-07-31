@@ -1,45 +1,96 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, ScrollView, Alert } from 'react-native';
-import { Upload, FileText, Image, File, Plus } from 'lucide-react-native';
-
-const categories = [
-  'Mathematics',
-  'Physics',
-  'Chemistry',
-  'Biology',
-  'Computer Science',
-  'Engineering',
-  'Literature',
-  'History',
-  'Economics',
-  'Psychology',
-];
+import { Upload, FileText, Image, File, Plus, Check } from 'lucide-react-native';
+import { useFileUpload } from '@/hooks/useFileUpload';
+import { getCategories, Category } from '@/lib/database';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function UploadScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedFile, setSelectedFile] = useState<any>(null);
+  const [selectedFileType, setSelectedFileType] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  
+  const { user } = useAuth();
+  const { uploading, uploadProgress, pickDocument, pickImage, submitUpload, calculateCoinPrice } = useFileUpload();
 
-  const handleFileSelect = (type: string) => {
-    setSelectedFile(type);
-    Alert.alert('File Selection', `${type} file selected (Demo)`);
+  useEffect(() => {
+    loadCategories();
+  }, []);
+
+  const loadCategories = async () => {
+    const cats = await getCategories();
+    setCategories(cats);
   };
 
-  const handleUpload = () => {
+  const handleFileSelect = async (type: string) => {
+    setSelectedFileType(type);
+    
+    try {
+      let file = null;
+      
+      if (type === 'PDF' || type === 'DOC') {
+        file = await pickDocument();
+      } else if (type === 'Image') {
+        file = await pickImage();
+      }
+      
+      if (file) {
+        setSelectedFile(file);
+        Alert.alert('File Selected', `${file.name || 'Image'} selected successfully`);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to select file');
+    }
+  };
+
+  const handleUpload = async () => {
     if (!title || !description || !category || !selectedFile) {
       Alert.alert('Error', 'Please fill in all fields and select a file');
       return;
     }
-    
-    Alert.alert('Success', 'File uploaded successfully! You earned 10 coins.', [
-      { text: 'OK', onPress: () => {
-        setTitle('');
-        setDescription('');
-        setCategory('');
-        setSelectedFile(null);
-      }}
-    ]);
+
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to upload files');
+      return;
+    }
+
+    setLoading(true);
+
+    const result = await submitUpload({
+      title,
+      description,
+      category,
+      fileType: selectedFileType,
+      file: selectedFile
+    });
+
+    setLoading(false);
+
+    if (result.success) {
+      const coinPrice = calculateCoinPrice(selectedFileType, selectedFile.size);
+      Alert.alert(
+        'Success!', 
+        `File uploaded successfully! You earned 10 coins and it will be available for ${coinPrice} coins once approved.`,
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              setTitle('');
+              setDescription('');
+              setCategory('');
+              setSelectedFile(null);
+              setSelectedFileType('');
+            }
+          }
+        ]
+      );
+    } else {
+      Alert.alert('Upload Failed', result.error || 'An error occurred during upload');
+    }
   };
 
   return (
@@ -78,18 +129,18 @@ export default function UploadScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
               {categories.map((cat) => (
                 <TouchableOpacity
-                  key={cat}
+                  key={cat.id}
                   style={[
                     styles.categoryChip,
-                    category === cat && styles.categoryChipActive
+                    category === cat.name && styles.categoryChipActive
                   ]}
-                  onPress={() => setCategory(cat)}
+                  onPress={() => setCategory(cat.name)}
                 >
                   <Text style={[
                     styles.categoryText,
-                    category === cat && styles.categoryTextActive
+                    category === cat.name && styles.categoryTextActive
                   ]}>
-                    {cat}
+                    {cat.name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -102,56 +153,74 @@ export default function UploadScreen() {
               <TouchableOpacity
                 style={[
                   styles.fileTypeCard,
-                  selectedFile === 'PDF' && styles.fileTypeCardActive
+                  selectedFileType === 'PDF' && styles.fileTypeCardActive
                 ]}
                 onPress={() => handleFileSelect('PDF')}
+                disabled={uploading}
               >
-                <FileText size={24} color={selectedFile === 'PDF' ? '#2563EB' : '#6B7280'} />
+                <FileText size={24} color={selectedFileType === 'PDF' ? '#2563EB' : '#6B7280'} />
                 <Text style={[
                   styles.fileTypeText,
-                  selectedFile === 'PDF' && styles.fileTypeTextActive
+                  selectedFileType === 'PDF' && styles.fileTypeTextActive
                 ]}>
                   PDF
                 </Text>
+                {selectedFileType === 'PDF' && selectedFile && (
+                  <Check size={16} color="#2563EB" />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
                   styles.fileTypeCard,
-                  selectedFile === 'DOC' && styles.fileTypeCardActive
+                  selectedFileType === 'DOC' && styles.fileTypeCardActive
                 ]}
                 onPress={() => handleFileSelect('DOC')}
+                disabled={uploading}
               >
-                <File size={24} color={selectedFile === 'DOC' ? '#2563EB' : '#6B7280'} />
+                <File size={24} color={selectedFileType === 'DOC' ? '#2563EB' : '#6B7280'} />
                 <Text style={[
                   styles.fileTypeText,
-                  selectedFile === 'DOC' && styles.fileTypeTextActive
+                  selectedFileType === 'DOC' && styles.fileTypeTextActive
                 ]}>
                   DOC
                 </Text>
+                {selectedFileType === 'DOC' && selectedFile && (
+                  <Check size={16} color="#2563EB" />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
                   styles.fileTypeCard,
-                  selectedFile === 'Image' && styles.fileTypeCardActive
+                  selectedFileType === 'Image' && styles.fileTypeCardActive
                 ]}
                 onPress={() => handleFileSelect('Image')}
+                disabled={uploading}
               >
-                <Image size={24} color={selectedFile === 'Image' ? '#2563EB' : '#6B7280'} />
+                <Image size={24} color={selectedFileType === 'Image' ? '#2563EB' : '#6B7280'} />
                 <Text style={[
                   styles.fileTypeText,
-                  selectedFile === 'Image' && styles.fileTypeTextActive
+                  selectedFileType === 'Image' && styles.fileTypeTextActive
                 ]}>
                   Image
                 </Text>
+                {selectedFileType === 'Image' && selectedFile && (
+                  <Check size={16} color="#2563EB" />
+                )}
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.uploadButton} onPress={handleUpload}>
+          <TouchableOpacity 
+            style={[styles.uploadButton, (uploading || loading) && styles.uploadButtonDisabled]} 
+            onPress={handleUpload}
+            disabled={uploading || loading}
+          >
             <Upload size={20} color="#FFFFFF" />
-            <Text style={styles.uploadButtonText}>Upload Resource</Text>
+            <Text style={styles.uploadButtonText}>
+              {uploading ? `Uploading... ${uploadProgress}%` : loading ? 'Processing...' : 'Upload Resource'}
+            </Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -270,5 +339,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  uploadButtonDisabled: {
+    opacity: 0.6,
   },
 });

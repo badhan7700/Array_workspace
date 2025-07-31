@@ -1,88 +1,153 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, ScrollView, Alert } from 'react-native';
-import { Search, Filter, FileText, Download, Coins } from 'lucide-react-native';
-
-const mockResources = [
-  {
-    id: '1',
-    title: 'Calculus II Study Guide',
-    description: 'Comprehensive study guide covering integration techniques',
-    category: 'Mathematics',
-    type: 'PDF',
-    coins: 5,
-    author: 'Sarah Johnson',
-    downloads: 45,
-  },
-  {
-    id: '2',
-    title: 'Physics Lab Report Template',
-    description: 'Professional template for physics lab reports',
-    category: 'Physics',
-    type: 'DOC',
-    coins: 3,
-    author: 'Mike Chen',
-    downloads: 23,
-  },
-  {
-    id: '3',
-    title: 'Organic Chemistry Reactions',
-    description: 'Visual guide to common organic chemistry reactions',
-    category: 'Chemistry',
-    type: 'Image',
-    coins: 4,
-    author: 'Emily Davis',
-    downloads: 67,
-  },
-  {
-    id: '4',
-    title: 'Data Structures Notes',
-    description: 'Complete notes on data structures and algorithms',
-    category: 'Computer Science',
-    type: 'PDF',
-    coins: 6,
-    author: 'Alex Rodriguez',
-    downloads: 89,
-  },
-  {
-    id: '5',
-    title: 'Shakespeare Analysis',
-    description: 'In-depth analysis of Hamlet and Macbeth',
-    category: 'Literature',
-    type: 'DOC',
-    coins: 4,
-    author: 'Jessica Wilson',
-    downloads: 34,
-  },
-];
+import { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, TextInput, ScrollView, Alert, Linking } from 'react-native';
+import { Search, Filter, FileText, Download, Coins, RefreshCw } from 'lucide-react-native';
+import { getResources, getCategories, downloadResource, checkUserCoins, hasUserDownloaded, Resource, Category } from '@/lib/database';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 
 export default function DownloadScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [userCoins] = useState(25);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [userCoins, setUserCoins] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
-  const categories = ['All', 'Mathematics', 'Physics', 'Chemistry', 'Computer Science', 'Literature'];
+  const { user } = useAuth();
 
-  const filteredResources = mockResources.filter(resource => {
-    const matchesSearch = resource.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         resource.description.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || resource.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  useEffect(() => {
+    loadData();
+  }, [user]);
 
-  const handleDownload = (resource: any) => {
-    if (userCoins >= resource.coins) {
-      Alert.alert(
-        'Download Resource',
-        `Download "${resource.title}" for ${resource.coins} coins?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Download', onPress: () => {
-            Alert.alert('Success', `Downloaded ${resource.title}!`);
-          }}
-        ]
-      );
-    } else {
-      Alert.alert('Insufficient Coins', 'You need more coins to download this resource.');
+  useEffect(() => {
+    loadResources();
+  }, [searchQuery, selectedCategory]);
+
+  const loadData = async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const [categoriesData, coinsData] = await Promise.all([
+        getCategories(),
+        checkUserCoins(user.id)
+      ]);
+      
+      setCategories([{ id: 'all', name: 'All', description: '', icon: '', color: '', is_active: true, created_at: '' }, ...categoriesData]);
+      setUserCoins(coinsData);
+      
+      await loadResources();
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadResources = async () => {
+    try {
+      const filters: any = {};
+      
+      if (searchQuery) {
+        filters.search = searchQuery;
+      }
+      
+      if (selectedCategory && selectedCategory !== 'All') {
+        filters.category = selectedCategory;
+      }
+      
+      const resourcesData = await getResources(filters);
+      setResources(resourcesData);
+    } catch (error) {
+      console.error('Error loading resources:', error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const handleDownload = async (resource: Resource) => {
+    if (!user) {
+      Alert.alert('Error', 'Please sign in to download resources');
+      return;
+    }
+
+    // Check if user has enough coins
+    if (userCoins < resource.coin_price) {
+      Alert.alert('Insufficient Coins', `You need ${resource.coin_price} coins to download this resource. You have ${userCoins} coins.`);
+      return;
+    }
+
+    // Check if user already downloaded this resource
+    const alreadyDownloaded = await hasUserDownloaded(user.id, resource.id);
+    if (alreadyDownloaded) {
+      Alert.alert('Already Downloaded', 'You have already downloaded this resource.');
+      return;
+    }
+
+    Alert.alert(
+      'Download Resource',
+      `Download "${resource.title}" for ${resource.coin_price} coins?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Download', 
+          onPress: () => performDownload(resource)
+        }
+      ]
+    );
+  };
+
+  const performDownload = async (resource: Resource) => {
+    if (!user) return;
+
+    setDownloadingIds(prev => new Set(prev).add(resource.id));
+
+    try {
+      // Record the download in database
+      const result = await downloadResource(resource.id, user.id, resource.coin_price);
+      
+      if (result.error) {
+        Alert.alert('Download Failed', result.error.message || 'Failed to process download');
+        return;
+      }
+
+      // Update user coins
+      setUserCoins(prev => prev - resource.coin_price);
+
+      // Get file URL and open it
+      if (resource.file_url) {
+        const { data } = supabase.storage
+          .from('resources')
+          .getPublicUrl(resource.file_url);
+        
+        if (data.publicUrl) {
+          // Try to open the file
+          const supported = await Linking.canOpenURL(data.publicUrl);
+          if (supported) {
+            await Linking.openURL(data.publicUrl);
+          } else {
+            Alert.alert('Download Complete', 'File downloaded successfully!');
+          }
+        }
+      }
+
+      Alert.alert('Success', `Downloaded ${resource.title}! ${resource.coin_price} coins deducted.`);
+      
+    } catch (error) {
+      console.error('Error downloading resource:', error);
+      Alert.alert('Error', 'An error occurred during download');
+    } finally {
+      setDownloadingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(resource.id);
+        return newSet;
+      });
     }
   };
 
@@ -108,62 +173,82 @@ export default function DownloadScreen() {
         </View>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-        {categories.map((category) => (
-          <TouchableOpacity
-            key={category}
-            style={[
-              styles.categoryChip,
-              selectedCategory === category && styles.categoryChipActive
-            ]}
-            onPress={() => setSelectedCategory(category)}
-          >
-            <Text style={[
-              styles.categoryText,
-              selectedCategory === category && styles.categoryTextActive
-            ]}>
-              {category}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      <View style={styles.headerRow}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+          {categories.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              style={[
+                styles.categoryChip,
+                selectedCategory === category.name && styles.categoryChipActive
+              ]}
+              onPress={() => setSelectedCategory(category.name)}
+            >
+              <Text style={[
+                styles.categoryText,
+                selectedCategory === category.name && styles.categoryTextActive
+              ]}>
+                {category.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        
+        <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh} disabled={refreshing}>
+          <RefreshCw size={20} color={refreshing ? '#9CA3AF' : '#2563EB'} />
+        </TouchableOpacity>
+      </View>
 
       <ScrollView style={styles.resourcesList}>
-        {filteredResources.map((resource) => (
-          <View key={resource.id} style={styles.resourceCard}>
-            <View style={styles.resourceHeader}>
-              <View style={styles.resourceInfo}>
-                <Text style={styles.resourceTitle}>{resource.title}</Text>
-                <Text style={styles.resourceAuthor}>by {resource.author}</Text>
-              </View>
-              <View style={styles.resourceType}>
-                <FileText size={16} color="#6B7280" />
-                <Text style={styles.resourceTypeText}>{resource.type}</Text>
-              </View>
-            </View>
-            
-            <Text style={styles.resourceDescription}>{resource.description}</Text>
-            
-            <View style={styles.resourceFooter}>
-              <View style={styles.resourceStats}>
-                <Text style={styles.resourceCategory}>{resource.category}</Text>
-                <Text style={styles.resourceDownloads}>{resource.downloads} downloads</Text>
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading resources...</Text>
+          </View>
+        ) : resources.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No resources found</Text>
+            <Text style={styles.emptySubtext}>Try adjusting your search or category filter</Text>
+          </View>
+        ) : (
+          resources.map((resource) => (
+            <View key={resource.id} style={styles.resourceCard}>
+              <View style={styles.resourceHeader}>
+                <View style={styles.resourceInfo}>
+                  <Text style={styles.resourceTitle}>{resource.title}</Text>
+                  <Text style={styles.resourceAuthor}>by {resource.uploader_name || 'Unknown'}</Text>
+                </View>
+                <View style={styles.resourceType}>
+                  <FileText size={16} color="#6B7280" />
+                  <Text style={styles.resourceTypeText}>{resource.file_type}</Text>
+                </View>
               </View>
               
-              <TouchableOpacity
-                style={[
-                  styles.downloadButton,
-                  userCoins < resource.coins && styles.downloadButtonDisabled
-                ]}
-                onPress={() => handleDownload(resource)}
-              >
-                <Coins size={16} color="#FFFFFF" />
-                <Text style={styles.downloadButtonText}>{resource.coins}</Text>
-                <Download size={16} color="#FFFFFF" />
-              </TouchableOpacity>
+              <Text style={styles.resourceDescription}>{resource.description}</Text>
+              
+              <View style={styles.resourceFooter}>
+                <View style={styles.resourceStats}>
+                  <Text style={styles.resourceCategory}>{resource.category_name || 'Uncategorized'}</Text>
+                  <Text style={styles.resourceDownloads}>{resource.download_count} downloads</Text>
+                </View>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.downloadButton,
+                    (userCoins < resource.coin_price || downloadingIds.has(resource.id)) && styles.downloadButtonDisabled
+                  ]}
+                  onPress={() => handleDownload(resource)}
+                  disabled={downloadingIds.has(resource.id)}
+                >
+                  <Coins size={16} color="#FFFFFF" />
+                  <Text style={styles.downloadButtonText}>
+                    {downloadingIds.has(resource.id) ? '...' : resource.coin_price}
+                  </Text>
+                  <Download size={16} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ))}
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -323,5 +408,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '600',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  refreshButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#6B7280',
+    textAlign: 'center',
   },
 });
