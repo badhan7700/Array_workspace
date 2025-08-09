@@ -51,9 +51,7 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
 
-  const navigateToSettings = () => {
-    router.push('/(tabs)/settings');
-  };
+  // Removed navigateToSettings since Settings is now a separate tab
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -96,9 +94,6 @@ export default function DashboardScreen() {
             <Text style={styles.welcomeText}>Welcome back,</Text>
             <Text style={styles.userName}>{userProfile.full_name}</Text>
           </View>
-          <TouchableOpacity style={styles.settingsButton} onPress={navigateToSettings}>
-            <Text style={styles.settingsButtonText}>Settings</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Profile Card */}
@@ -233,9 +228,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#111827',
   },
-  settingsButton: {
-    padding: 8,
-  },
+
   profileCard: {
     backgroundColor: '#FFFFFF',
     margin: 20,

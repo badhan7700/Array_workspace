@@ -107,11 +107,41 @@ export default function SettingsScreen() {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Sign Out', style: 'destructive', onPress: async () => {
-          const { error } = await signOut();
-          if (error) {
-            Alert.alert('Error', 'Failed to sign out');
-          } else {
-            router.replace('/');
+          try {
+            const { error } = await signOut();
+            if (error) {
+              Alert.alert('Error', 'Failed to sign out: ' + error.message);
+            } else {
+              // Clear any local state if needed
+              setSettings({
+                name: '',
+                email: '',
+                studentId: '',
+                semester: '',
+                notifications: {
+                  push: true,
+                  email: true,
+                  downloads: true,
+                  uploads: false,
+                },
+                privacy: {
+                  profileVisible: true,
+                  showStats: true,
+                  allowMessages: true,
+                },
+                preferences: {
+                  darkMode: false,
+                  language: 'English',
+                  autoDownload: false,
+                },
+              });
+              
+              // Redirect to login page
+              router.replace('/login');
+            }
+          } catch (error) {
+            console.error('Logout error:', error);
+            Alert.alert('Error', 'An unexpected error occurred during sign out');
           }
         }}
       ]
