@@ -162,8 +162,11 @@ export const uploadResource = async (resourceData: {
   description: string;
   category_id: string;
   file_type: string;
+  file_url?: string;
+  file_size?: number;
   coin_price: number;
   uploader_id: string;
+  is_approved?: boolean;
   tags?: string[];
 }) => {
   const { data, error } = await supabase

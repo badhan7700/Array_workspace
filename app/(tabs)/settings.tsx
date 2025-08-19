@@ -100,52 +100,69 @@ export default function SettingsScreen() {
     );
   };
 
-  const handleLogout = async () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign Out', style: 'destructive', onPress: async () => {
-          try {
-            const { error } = await signOut();
-            if (error) {
-              Alert.alert('Error', 'Failed to sign out: ' + error.message);
-            } else {
-              // Clear any local state if needed
-              setSettings({
-                name: '',
-                email: '',
-                studentId: '',
-                semester: '',
-                notifications: {
-                  push: true,
-                  email: true,
-                  downloads: true,
-                  uploads: false,
-                },
-                privacy: {
-                  profileVisible: true,
-                  showStats: true,
-                  allowMessages: true,
-                },
-                preferences: {
-                  darkMode: false,
-                  language: 'English',
-                  autoDownload: false,
-                },
-              });
-              
-              // Redirect to login page
-              router.replace('/login');
-            }
-          } catch (error) {
-            console.error('Logout error:', error);
-            Alert.alert('Error', 'An unexpected error occurred during sign out');
-          }
-        }}
-      ]
-    );
+  const handleLogout = () => {
+    console.log('🔘 Sign Out button pressed');
+    
+    // Since Alert doesn't work in web environment, use window.confirm as fallback
+    const confirmed = window.confirm('Are you sure you want to sign out?');
+    
+    if (confirmed) {
+      console.log('✅ Logout confirmed');
+      performLogout();
+    } else {
+      console.log('❌ Logout cancelled');
+    }
+  };
+
+  const performLogout = async () => {
+    try {
+      console.log('🚪 Starting logout process...');
+      
+      const { error } = await signOut();
+      
+      if (error) {
+        console.error('❌ Logout error:', error);
+        Alert.alert('Error', 'Failed to sign out. Please try again.');
+        return;
+      }
+      
+      console.log('✅ Logout successful');
+      
+      // Clear local state
+      setSettings({
+        name: '',
+        email: '',
+        studentId: '',
+        semester: '',
+        notifications: {
+          push: true,
+          email: true,
+          downloads: true,
+          uploads: false,
+        },
+        privacy: {
+          profileVisible: true,
+          showStats: true,
+          allowMessages: true,
+        },
+        preferences: {
+          darkMode: false,
+          language: 'English',
+          autoDownload: false,
+        },
+      });
+      
+      // Navigate to login
+      console.log('🔄 Redirecting to login...');
+      router.replace('/login');
+      
+    } catch (error) {
+      console.error('❌ Unexpected logout error:', error);
+      Alert.alert('Error', 'An unexpected error occurred during sign out');
+      
+      // Force logout even if there's an error
+      router.replace('/login');
+    }
   };
 
   return (
@@ -439,7 +456,12 @@ export default function SettingsScreen() {
             <Text style={styles.resetButtonText}>Reset to Defaults</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <TouchableOpacity 
+            style={styles.logoutButton} 
+            onPress={handleLogout}
+            activeOpacity={0.7}
+            testID="logout-button"
+          >
             <LogOut size={16} color="#FFFFFF" />
             <Text style={styles.logoutButtonText}>Sign Out</Text>
           </TouchableOpacity>

@@ -222,7 +222,12 @@ export function useAuthProvider(): AuthContextType {
     try {
       console.log('🚪 Starting signout process...');
       
-      // Clear AsyncStorage first
+      // Clear local state first
+      setUser(null);
+      setSession(null);
+      console.log('🔄 Local auth state cleared');
+      
+      // Clear AsyncStorage
       await AsyncStorage.multiRemove([
         STORAGE_KEYS.USER_SESSION,
         STORAGE_KEYS.USER_DATA,
@@ -230,34 +235,36 @@ export function useAuthProvider(): AuthContextType {
       ]);
       console.log('🗑️ AsyncStorage cleared during signout');
 
-      // Clear local state immediately
-      setUser(null);
-      setSession(null);
-      console.log('🔄 Local auth state cleared');
-
       // Sign out from Supabase
       const { error } = await supabase.auth.signOut();
       
       if (error) {
         console.error('❌ Supabase signout error:', error);
+        // Don't return error here - we've already cleared local state
       } else {
         console.log('✅ Successfully signed out from Supabase');
       }
 
-      return { error };
+      // Always return success since we've cleared local state
+      return { error: null };
     } catch (err) {
       console.error('❌ Unexpected signout error:', err);
       
-      // Even if there's an error, clear local state
+      // Even if there's an error, ensure local state is cleared
       setUser(null);
       setSession(null);
-      await AsyncStorage.multiRemove([
-        STORAGE_KEYS.USER_SESSION,
-        STORAGE_KEYS.USER_DATA,
-        STORAGE_KEYS.AUTH_STATE
-      ]);
+      try {
+        await AsyncStorage.multiRemove([
+          STORAGE_KEYS.USER_SESSION,
+          STORAGE_KEYS.USER_DATA,
+          STORAGE_KEYS.AUTH_STATE
+        ]);
+      } catch (storageError) {
+        console.error('❌ Error clearing AsyncStorage:', storageError);
+      }
       
-      return { error: { message: 'An error occurred during signout, but local session was cleared' } as AuthError };
+      // Return success since local state is cleared
+      return { error: null };
     }
   };
 

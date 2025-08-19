@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Mail, Lock, Eye, EyeOff, LogIn } from 'lucide-react-native';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,9 +20,17 @@ import { validateEmail, validatePassword } from '@/utils/validation';
 export default function LoginScreen() {
   const router = useRouter();
   const { signIn } = useAuth();
+  const params = useLocalSearchParams();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+
+  // Pre-fill email if coming from signup
+  useEffect(() => {
+    if (params.email && typeof params.email === 'string') {
+      setEmail(params.email);
+    }
+  }, [params.email]);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});

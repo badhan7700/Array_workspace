@@ -58,10 +58,10 @@ export const AuthTester = () => {
     clearTestResults();
     addTestResult('🧪 Running All Authentication Tests...');
     addTestResult('================================');
-    
+
     runEnvironmentTest();
     await runAsyncStorageTest();
-    
+
     addTestResult('================================');
     addTestResult('🧪 All tests completed!');
   };
@@ -69,7 +69,7 @@ export const AuthTester = () => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>🧪 Auth System Tester</Text>
-      
+
       <View style={styles.statusSection}>
         <Text style={styles.sectionTitle}>Current Status:</Text>
         <Text style={styles.statusText}>Loading: {loading ? '⏳ Yes' : '✅ No'}</Text>
@@ -84,25 +84,25 @@ export const AuthTester = () => {
         <TouchableOpacity style={styles.testButton} onPress={runAllTests}>
           <Text style={styles.buttonText}>🧪 Run All Tests</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.testButton} onPress={runEnvironmentTest}>
           <Text style={styles.buttonText}>🔧 Test Environment</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.testButton} onPress={runAsyncStorageTest}>
           <Text style={styles.buttonText}>📱 Test AsyncStorage</Text>
         </TouchableOpacity>
-        
+
         {user && (
           <TouchableOpacity style={styles.signoutButton} onPress={runSignoutTest}>
             <Text style={styles.buttonText}>🚪 Test Signout</Text>
           </TouchableOpacity>
         )}
-        
+
         <TouchableOpacity style={styles.clearButton} onPress={clearAsyncStorage}>
           <Text style={styles.buttonText}>🗑️ Clear AsyncStorage</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity style={styles.clearButton} onPress={clearTestResults}>
           <Text style={styles.buttonText}>🧹 Clear Results</Text>
         </TouchableOpacity>

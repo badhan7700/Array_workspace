@@ -93,27 +93,32 @@ export const useFileUpload = () => {
     try {
       const fileExt = file.name?.split('.').pop() || 'unknown';
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `resources/${fileName}`;
+      const filePath = `${fileName}`; // Remove 'resources/' prefix since bucket name is already 'resources'
 
       // Convert file to blob for upload
       const response = await fetch(file.uri);
       const blob = await response.blob();
 
+      console.log('Uploading file:', { fileName, filePath, size: blob.size, type: blob.type });
+
       const { data, error } = await supabase.storage
         .from('resources')
         .upload(filePath, blob, {
-          contentType: file.mimeType || 'application/octet-stream',
+          contentType: file.mimeType || blob.type || 'application/octet-stream',
           upsert: false
         });
 
       if (error) {
-        console.error('Error uploading file:', error);
+        console.error('Supabase storage error:', error);
+        Alert.alert('Upload Error', `Failed to upload file: ${error.message}`);
         return null;
       }
 
+      console.log('File uploaded successfully:', data);
       return data.path;
     } catch (error) {
       console.error('Error in uploadFile:', error);
+      Alert.alert('Upload Error', 'An unexpected error occurred during file upload');
       return null;
     }
   };
@@ -176,7 +181,7 @@ export const useFileUpload = () => {
       // Upload file to storage
       const filePath = await uploadFile(uploadData.file);
       if (!filePath) {
-        return { success: false, error: 'Failed to upload file' };
+        return { success: false, error: 'Failed to upload file. Please check if the storage bucket exists.' };
       }
 
       setUploadProgress(50);
@@ -191,20 +196,24 @@ export const useFileUpload = () => {
       // Calculate coin price
       const coinPrice = calculateCoinPrice(uploadData.fileType, uploadData.file.size);
 
-      // Create resource record
+      // Create resource record with file URL and size (auto-approved for demo)
       const { data, error } = await uploadResource({
         title: uploadData.title,
         description: uploadData.description,
         category_id: selectedCategory.id,
         file_type: uploadData.fileType,
+        file_url: filePath, // Store the file path for later URL generation
+        file_size: uploadData.file.size || 0,
         coin_price: coinPrice,
         uploader_id: user.id,
+        is_approved: true, // Auto-approve for demo purposes
         tags: uploadData.title.split(' ').filter(word => word.length > 2) // Simple tag extraction
       });
 
       setUploadProgress(100);
 
       if (error) {
+        console.error('Database error:', error);
         return { success: false, error: error.message || 'Failed to create resource record' };
       }
 
@@ -212,7 +221,7 @@ export const useFileUpload = () => {
 
     } catch (error) {
       console.error('Error in submitUpload:', error);
-      return { success: false, error: 'An unexpected error occurred' };
+      return { success: false, error: 'An unexpected error occurred during upload' };
     } finally {
       setUploading(false);
       setUploadProgress(0);
@@ -249,14 +258,17 @@ export const useFileUpload = () => {
       // Calculate coin price
       const coinPrice = calculateCoinPrice(uploadData.fileType);
 
-      // Create resource record without actual file
+      // Create resource record without actual file (mock upload)
       const { data, error } = await uploadResource({
         title: uploadData.title,
         description: uploadData.description,
         category_id: selectedCategory.id,
         file_type: uploadData.fileType,
+        file_url: `mock-${Date.now()}.${uploadData.fileType.toLowerCase()}`, // Mock file path
+        file_size: Math.floor(Math.random() * 1000000) + 100000, // Random size between 100KB-1MB
         coin_price: coinPrice,
         uploader_id: user.id,
+        is_approved: true, // Auto-approve for demo purposes
         tags: uploadData.title.split(' ').filter(word => word.length > 2)
       });
 

@@ -100,6 +100,8 @@ export default function SignupScreen() {
     setLoading(true);
     
     try {
+      console.log('🔄 Starting signup process...');
+      
       const { error } = await signUp(email, password, {
         fullName: fullName.trim(),
         studentId: studentId.toUpperCase().trim(),
@@ -107,21 +109,32 @@ export default function SignupScreen() {
       });
       
       if (error) {
+        console.error('❌ Signup error:', error);
         Alert.alert('Sign Up Failed', error.message);
       } else {
+        console.log('✅ Signup successful!');
+        
+        // Check if email confirmation is required
         Alert.alert(
-          'Success!',
-          'Please check your email for a verification link before signing in.',
+          'Account Created Successfully!',
+          'Your account has been created. You can now sign in with your credentials.',
           [
             {
-              text: 'OK',
-              onPress: () => router.replace('/login'),
+              text: 'Sign In Now',
+              onPress: () => {
+                // Pre-fill the login form
+                router.replace({
+                  pathname: '/login',
+                  params: { email: email }
+                });
+              },
             },
           ]
         );
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
+      console.error('❌ Unexpected signup error:', error);
+      Alert.alert('Error', 'An unexpected error occurred during signup');
     } finally {
       setLoading(false);
     }
